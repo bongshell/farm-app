@@ -92,12 +92,13 @@ elif menu == "2. การจัดการแปลง":
                     {
                         "plot_name": plot_name,
                         "crop_type": crop_type,
+                        "variety": variety,
                         "area_rai": area_rai,
                         "lat": lat,
                         "lng": lng,
                         "deed_no": deed_no,
                     }
-                ).execute()
+                ).execute()                
                 st.success(f"บันทึกแปลง '{plot_name}' เรียบร้อยแล้ว")
                 st.cache_data.clear()
                 st.rerun()
