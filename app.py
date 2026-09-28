@@ -79,7 +79,8 @@ elif menu == "2. การจัดการแปลง":
     with tab2:
         with st.form("plot_form"):
             plot_name = st.text_input("ชื่อแปลง")
-            crop_type = st.selectbox("ชนิดพืช", ["ปาล์มน้ำมัน", "ยางพารา", "อื่นๆ"])
+            crop_type = st.selectbox("ชนิดพืช", ["ปาล์มน้ำมัน", "ยางพารา", "ทุเรียน", "ลองกอง", "มังคุด", "อื่นๆ"])
+            variety = st.text_input("สายพันธุ์ (เช่น คอมแพค, หมอนทอง, ก้านยาว)", placeholder="ระบุสายพันธุ์")
             area_rai = st.number_input("ขนาด (ไร่)", min_value=0.0, step=0.1)
             lat = st.number_input("Latitude", format="%.6f")
             lng = st.number_input("Longitude", format="%.6f")
