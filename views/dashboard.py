@@ -58,24 +58,34 @@ def _chart_income_expense(income: float, expense: float) -> None:
         st.plotly_chart(compact_layout(fig), use_container_width=True)
 
 
+from config.constants import TBL_PLOT_CROPS   # เพิ่ม import
+
+
 def _chart_crop_mix(plots_df: pd.DataFrame) -> None:
-    with chart_box("สัดส่วนแปลงตามชนิดพืช"):
-        if not has_cols(plots_df, ["crop_type"]):
+    with chart_box("พื้นที่ปลูกตามชนิดพืช (ไร่)"):
+        crops_df = fetch_table(TBL_PLOT_CROPS)
+
+        if has_cols(crops_df, ["crop_type"]):
+            crops_df["area_rai"] = pd.to_numeric(crops_df.get("area_rai"), errors="coerce").fillna(0)
+            data = (
+                crops_df.groupby("crop_type", as_index=False)["area_rai"].sum()
+                .sort_values("area_rai", ascending=True)
+            )
+            x_col, x_title = "area_rai", "พื้นที่ (ไร่)"
+        elif has_cols(plots_df, ["crop_type"]):
+            data = (
+                plots_df["crop_type"].value_counts()
+                .rename_axis("crop_type").reset_index(name="area_rai")
+            )
+            x_col, x_title = "area_rai", "จำนวนแปลง"
+        else:
             empty_state("ยังไม่มีข้อมูลแปลง")
             return
-        counts = (
-            plots_df["crop_type"]
-            .value_counts()
-            .rename_axis("crop_type")
-            .reset_index(name="count")
-        )
-        fig = px.bar(
-            counts, x="count", y="crop_type",
-            orientation="h", color="crop_type", text="count",
-        )
-        compact_layout(fig).update_layout(
-            showlegend=False, yaxis_title="", xaxis_title="จำนวนแปลง"
-        )
+
+        fig = px.bar(data, x=x_col, y="crop_type", orientation="h",
+                     color="crop_type", text=x_col)
+        fig.update_traces(texttemplate="%{text:.1f}")
+        compact_layout(fig).update_layout(showlegend=False, yaxis_title="", xaxis_title=x_title)
         st.plotly_chart(fig, use_container_width=True)
 
 
