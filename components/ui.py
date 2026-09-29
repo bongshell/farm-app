@@ -11,8 +11,20 @@ from config.constants import CHART_HEIGHT
 
 CUSTOM_CSS = """
 <style>
-    header {visibility: hidden;}
-    .main {background-color: #f4f6f9;}
+    /* ซ่อนเฉพาะเมนู/ตัวนับ แต่คง header ไว้เพื่อให้ปุ่มเปิด sidebar ยังอยู่ */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header[data-testid="stHeader"] {background: transparent;}
+
+    /* ทำให้ปุ่มเปิด sidebar เด่นขึ้น มองเห็นชัดบนพื้นเข้ม */
+    [data-testid="stSidebarCollapsedControl"] {
+        background: #0e2a47;
+        border-radius: 8px;
+        padding: 4px;
+    }
+    [data-testid="stSidebarCollapsedControl"] svg {color: #fff; fill: #fff;}
+
+    .stApp {background-color: #f4f6f9;}
 
     .hero-banner {
         background: linear-gradient(135deg, #0e2a47 0%, #1a4a75 100%);
