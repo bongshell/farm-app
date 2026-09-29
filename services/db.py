@@ -54,3 +54,39 @@ def delete_row(table: str, row_id: int, success_msg: str = "ลบข้อม�
     st.cache_data.clear()
     st.session_state["flash"] = success_msg
     st.rerun()
+
+def _clean(payload: dict[str, Any]) -> dict[str, Any]:
+    """ตัดค่าว่างออกก่อนส่งเข้าฐานข้อมูล"""
+    return {k: v for k, v in payload.items() if v not in (None, "")}
+
+
+def insert_returning(table: str, payload: dict[str, Any]) -> dict | None:
+    """บันทึก 1 แถวแล้วคืนแถวที่เพิ่งสร้าง (เพื่อเอา id ไปใช้ต่อ)"""
+    try:
+        res = get_client().table(table).insert(_clean(payload)).execute()
+        rows = res.data or []
+        return rows[0] if rows else None
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"บันทึกตาราง `{table}` ไม่สำเร็จ: {exc}")
+        return None
+
+
+def insert_many(table: str, rows: list[dict[str, Any]]) -> bool:
+    """บันทึกหลายแถวพร้อมกัน"""
+    if not rows:
+        return True
+    try:
+        get_client().table(table).insert([_clean(r) for r in rows]).execute()
+        return True
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"บันทึกตาราง `{table}` ไม่สำเร็จ: {exc}")
+        return False
+
+
+def finish(success_msg: str, reset_keys: list[str] | None = None) -> None:
+    """ล้าง cache + รีเซ็ตฟอร์ม + แจ้งผล แล้ว rerun"""
+    for key in reset_keys or []:
+        st.session_state.pop(key, None)
+    st.cache_data.clear()
+    st.session_state["flash"] = success_msg
+    st.rerun()
