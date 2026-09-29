@@ -1,8 +1,21 @@
-import streamlit as st
-from supabase import create_client, Client
+"""สร้างการเชื่อมต่อไปยัง Supabase จากค่าใน secrets.toml"""
 
-@st.cache_resource
+from __future__ import annotations
+
+import streamlit as st
+from supabase import Client, create_client
+
+
 def get_supabase_client() -> Client:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
+    """อ่าน URL/KEY จาก st.secrets แล้วคืน Supabase client."""
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+    except KeyError as exc:
+        st.error(
+            "ไม่พบค่า SUPABASE_URL / SUPABASE_KEY ใน .streamlit/secrets.toml "
+            f"(ขาด: {exc})"
+        )
+        st.stop()
+
     return create_client(url, key)
