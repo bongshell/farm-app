@@ -20,6 +20,7 @@ st.set_page_config(
     page_title="ระบบบริหารจัดการสวนอัจฉริยะ",
     page_icon="🌴",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 # ทุกหน้าใช้ signature เดียวกัน: render(plots_df)
