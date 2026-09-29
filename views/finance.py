@@ -176,6 +176,10 @@ def _expense_form(plot_id: int, tx_date: date, crop_type: str) -> None:
 
 
 # ---------------------------------------------------------
+from config.constants import TBL_PLOT_CROPS          # เพิ่ม import
+from services.db import fetch_table, insert_row      # เพิ่ม fetch_table
+
+
 def render(plots_df: pd.DataFrame) -> None:
     st.header("💰 บันทึกรายรับ-รายจ่าย")
 
@@ -186,10 +190,25 @@ def render(plots_df: pd.DataFrame) -> None:
     selected_name = st.selectbox("เลือกแปลงที่ต้องการบันทึก", plots_df["plot_name"])
     plot = plots_df.loc[plots_df["plot_name"] == selected_name].iloc[0]
     plot_id = int(plot["id"])
-    crop_type = str(plot["crop_type"])
-    tx_date = st.date_input("วันที่ทำรายการ", value=date.today())
 
-    st.markdown(f"**พืชประจำแปลง:** `{crop_type}`")
+    # ---- เลือกชนิดพืชจากที่ปลูกจริงในแปลงนี้ ----
+    crops_df = fetch_table(TBL_PLOT_CROPS)
+    if not crops_df.empty and "plot_id" in crops_df.columns:
+        options = crops_df.loc[crops_df["plot_id"] == plot_id, "crop_type"].dropna().unique().tolist()
+    else:
+        options = []
+    if not options:
+        options = [str(plot["crop_type"])]
+
+    col_crop, col_date = st.columns(2)
+    crop_type = col_crop.selectbox(
+        "ชนิดพืชที่ทำรายการ", options,
+        help="แปลงนี้ปลูกผสมหลายชนิด เลือกพืชที่ต้องการบันทึก" if len(options) > 1 else None,
+    )
+    tx_date = col_date.date_input("วันที่ทำรายการ", value=date.today())
+
+    if len(options) > 1:
+        st.caption(f"แปลงนี้ปลูก: {' • '.join(options)}")
 
     if crop_type in INCOME_FORMS:
         INCOME_FORMS[crop_type](plot_id, tx_date)
