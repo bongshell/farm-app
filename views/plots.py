@@ -18,7 +18,13 @@ from config.constants import (
     TBL_PLOT_CROPS,
     TBL_PLOTS,
 )
-from services.db import fetch_table, finish, insert_many, insert_returning
+from services.db import (
+    delete_silent,
+    fetch_table,
+    finish,
+    insert_many,
+    insert_returning,
+)
 
 VERSION_KEY = "plot_form_version"
 
@@ -354,8 +360,10 @@ def _plot_form() -> None:
 
     crops_payload = [{**r, "plot_id": created["id"]} for r in crop_rows]
     if not insert_many(TBL_PLOT_CROPS, crops_payload):
-        st.warning("บันทึกแปลงสำเร็จ แต่บันทึกรายการพืชไม่สำเร็จ กรุณาเพิ่มพืชอีกครั้ง")
+        delete_silent(TBL_PLOTS, created["id"])   # ย้อนกลับ ไม่ให้เหลือแปลงค้าง
+        st.error("บันทึกรายการพืชไม่สำเร็จ — ยกเลิกการบันทึกแปลงทั้งหมดแล้ว กรุณาลองใหม่")
         return
+
 
     st.session_state[VERSION_KEY] = st.session_state.get(VERSION_KEY, 0) + 1
     finish(f"บันทึกแปลง '{name}' พร้อมพืช {len(crop_rows)} ชนิด สำเร็จแล้ว!")
