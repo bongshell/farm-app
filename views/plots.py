@@ -1,6 +1,8 @@
-"""หน้า 2 — การจัดการแปลง (รองรับพืชผสมหลายชนิด + เอกสารสิทธิ์ราชการ)"""
+"""หน้า 2 — การจัดการแปลง (พืชผสมหลายชนิด + เอกสารสิทธิ์ราชการ)"""
 
 from __future__ import annotations
+
+from typing import Any          # ← บรรทัดที่ขาดไปรอบก่อน
 
 import pandas as pd
 import streamlit as st
@@ -18,23 +20,51 @@ from config.constants import (
 )
 from services.db import fetch_table, finish, insert_many, insert_returning
 
-CROP_EDITOR_KEY = "plot_crop_editor"
-FORM_KEYS = [
-    "plot_name", "plot_rai", "plot_ngan", "plot_wa", "plot_lat", "plot_lng",
-    "deed_type", "prov", "district", "subdistrict", "moo", "village", "plot_note",
-    CROP_EDITOR_KEY,
-] + [f"deed_{k}" for k in ("deed_no", "deed_book", "deed_page", "land_no", "survey_page", "map_sheet")]
+VERSION_KEY = "plot_form_version"
 
 EMPTY_CROPS = pd.DataFrame(
-    [{"ชนิดพืช": None, "สายพันธุ์": "", "พื้นที่ (ไร่)": 0.0, "จำนวนต้น": 0, "ปีที่ปลูก (พ.ศ.)": None}]
+    [{"ชนิดพืช": None, "สายพันธุ์": "", "พื้นที่ (ไร่)": None,
+      "จำนวนต้น": None, "ปีที่ปลูก (พ.ศ.)": None}]
 )
+
+
+# ---------------------------------------------------------
+# ตัวช่วย: key ที่รีเซ็ตได้ + แปลงชนิดข้อมูลแบบปลอดภัย
+# ---------------------------------------------------------
+def _k(name: str) -> str:
+    """สร้าง key ที่มีเลขเวอร์ชันต่อท้าย — เพิ่มเวอร์ชัน = ฟอร์มว่างใหม่ทั้งชุด"""
+    return f"{name}_v{st.session_state.get(VERSION_KEY, 0)}"
+
+
+def _is_blank(val: Any) -> bool:
+    if val is None or val == "":
+        return True
+    try:
+        return bool(pd.isna(val))
+    except (TypeError, ValueError):
+        return False
+
+
+def _safe_float(val: Any) -> float | None:
+    """แปลงเป็น float — NaN / ว่าง / ข้อความมั่ว คืน None แทนที่จะพัง"""
+    if _is_blank(val):
+        return None
+    try:
+        num = float(val)
+    except (TypeError, ValueError):
+        return None
+    return None if pd.isna(num) else num
+
+
+def _safe_int(val: Any) -> int | None:
+    num = _safe_float(val)
+    return None if num is None else int(num)
 
 
 # ---------------------------------------------------------
 # แท็บ 1 — รายชื่อแปลง
 # ---------------------------------------------------------
 def _crop_summary(crops_df: pd.DataFrame) -> dict[int, str]:
-    """รวมชนิดพืชของแต่ละแปลงเป็นข้อความเดียว"""
     if crops_df.empty or "plot_id" not in crops_df.columns:
         return {}
     summary: dict[int, str] = {}
@@ -42,9 +72,9 @@ def _crop_summary(crops_df: pd.DataFrame) -> dict[int, str]:
         parts = []
         for _, row in grp.iterrows():
             label = str(row.get("crop_type", ""))
-            area = row.get("area_rai")
-            if pd.notna(area) and float(area or 0) > 0:
-                label += f" {float(area):.1f} ไร่"
+            area = _safe_float(row.get("area_rai"))
+            if area:
+                label += f" {area:.1f} ไร่"
             parts.append(label)
         summary[int(plot_id)] = " • ".join(parts)
     return summary
@@ -72,12 +102,21 @@ def _plot_list(plots_df: pd.DataFrame) -> None:
         "province": "จังหวัด",
     }
     show = [c for c in cols_map if c in view.columns]
-    st.dataframe(
-        view[show].rename(columns=cols_map),
-        use_container_width=True,
-        hide_index=True,
-    )
-    st.caption(f"ทั้งหมด {len(plots_df)} แปลง • รวม {view.get('area_rai', pd.Series(dtype=float)).sum():,.2f} ไร่")
+    st.dataframe(view[show].rename(columns=cols_map),
+                 use_container_width=True, hide_index=True)
+
+    total_area = pd.to_numeric(view.get("area_rai"), errors="coerce").fillna(0).sum()
+    st.caption(f"ทั้งหมด {len(plots_df)} แปลง • รวม {total_area:,.2f} ไร่")
+
+    # แสดงหมายเหตุการครอบครองของแปลงที่มีบันทึกไว้
+    if "deed_note" in view.columns:
+        noted = view[view["deed_note"].notna() & (view["deed_note"].astype(str).str.strip() != "")]
+        if not noted.empty:
+            with st.expander(f"📝 หมายเหตุการครอบครอง ({len(noted)} แปลง)"):
+                for _, row in noted.iterrows():
+                    st.markdown(f"**{row.get('plot_name', '-')}**")
+                    st.caption(str(row["deed_note"]))
+                    st.divider()
 
     with st.expander("📋 ดูรายละเอียดพืชรายแปลง"):
         if crops_df.empty:
@@ -97,18 +136,18 @@ def _plot_list(plots_df: pd.DataFrame) -> None:
 
 
 # ---------------------------------------------------------
-# แท็บ 2 — ส่วนย่อยของฟอร์มเพิ่มแปลง
+# แท็บ 2 — ฟอร์มเพิ่มแปลง
 # ---------------------------------------------------------
 def _section_basic() -> tuple[str, float, float, float, float]:
     st.markdown("##### 📌 ข้อมูลทั่วไป")
-    plot_name = st.text_input("ชื่อแปลง *", key="plot_name",
+    plot_name = st.text_input("ชื่อแปลง *", key=_k("plot_name"),
                               placeholder="เช่น สวนเขาบางเนียง, แปลงหน้าบ้าน")
 
-    st.caption("เนื้อที่ตามเอกสารสิทธิ์ (กรอกตามหน้าเอกสารจริง)")
+    st.caption("เนื้อที่ตามเอกสารสิทธิ์ หรือประมาณการถ้าไม่มีเอกสาร (1 ไร่ = 4 งาน = 400 ตร.ว.)")
     c1, c2, c3, c4 = st.columns(4)
-    rai = c1.number_input("ไร่", min_value=0.0, step=1.0, key="plot_rai")
-    ngan = c2.number_input("งาน", min_value=0.0, max_value=3.0, step=1.0, key="plot_ngan")
-    wa = c3.number_input("ตารางวา", min_value=0.0, max_value=99.0, step=1.0, key="plot_wa")
+    rai = c1.number_input("ไร่", min_value=0.0, step=1.0, key=_k("rai"))
+    ngan = c2.number_input("งาน", min_value=0.0, max_value=3.0, step=1.0, key=_k("ngan"))
+    wa = c3.number_input("ตารางวา", min_value=0.0, max_value=99.0, step=1.0, key=_k("wa"))
     total_rai = rai + ngan / 4 + wa / 400
     c4.metric("รวมเป็นไร่", f"{total_rai:,.3f}")
     return plot_name, rai, ngan, wa, total_rai
@@ -116,11 +155,11 @@ def _section_basic() -> tuple[str, float, float, float, float]:
 
 def _section_crops() -> pd.DataFrame:
     st.markdown("##### 🌱 ชนิดพืชในแปลง (ใส่ได้หลายชนิด)")
-    st.caption("กดที่แถวว่างด้านล่างเพื่อเพิ่มพืชชนิดถัดไป • ลบแถวด้วยการเลือกแถวแล้วกด Delete")
+    st.caption("กดแถวว่างด้านล่างเพื่อเพิ่มพืชชนิดถัดไป • เว้นช่องตัวเลขว่างไว้ได้ถ้ายังไม่ทราบ")
 
-    edited = st.data_editor(
+    return st.data_editor(
         EMPTY_CROPS,
-        key=CROP_EDITOR_KEY,
+        key=_k("crop_editor"),
         num_rows="dynamic",
         use_container_width=True,
         column_config={
@@ -128,82 +167,103 @@ def _section_crops() -> pd.DataFrame:
             "สายพันธุ์": st.column_config.TextColumn(
                 help="เช่น หมอนทอง, ชะนี, RRIM 600, เทเนอรา", width="medium"),
             "พื้นที่ (ไร่)": st.column_config.NumberColumn(min_value=0.0, step=0.5, format="%.2f"),
-            "จำนวนต้น": st.column_config.NumberColumn(min_value=0, step=1, format="%d"),
-            "ปีที่ปลูก (พ.ศ.)": st.column_config.NumberColumn(
-                min_value=2500, max_value=2600, step=1, format="%d"),
+            "จำนวนต้น": st.column_config.NumberColumn(min_value=0, step=1),
+            "ปีที่ปลูก (พ.ศ.)": st.column_config.NumberColumn(min_value=2500, max_value=2600, step=1),
         },
     )
-    return edited
 
 
-def _section_location() -> dict[str, str]:
+def _section_location() -> dict[str, Any]:
     st.markdown("##### 🏠 ที่ตั้งแปลง")
     c1, c2, c3 = st.columns(3)
     province = c1.selectbox(
-        "จังหวัด", PROVINCES, key="prov",
+        "จังหวัด", PROVINCES, key=_k("prov"),
         index=PROVINCES.index(DEFAULT_PROVINCE) if DEFAULT_PROVINCE in PROVINCES else 0,
     )
-    district = c2.text_input("อำเภอ", key="district", placeholder="เช่น ตะกั่วป่า")
-    subdistrict = c3.text_input("ตำบล", key="subdistrict", placeholder="เช่น คึกคัก")
+    district = c2.text_input("อำเภอ", key=_k("district"), placeholder="เช่น ตะกั่วป่า")
+    subdistrict = c3.text_input("ตำบล", key=_k("subdistrict"), placeholder="เช่น คึกคัก")
 
     c4, c5 = st.columns(2)
-    moo = c4.text_input("หมู่ที่", key="moo", placeholder="เช่น 5")
-    village = c5.text_input("ชื่อหมู่บ้าน", key="village", placeholder="เช่น บ้านบางเนียง")
+    moo = c4.text_input("หมู่ที่", key=_k("moo"), placeholder="เช่น 5")
+    village = c5.text_input("ชื่อหมู่บ้าน", key=_k("village"), placeholder="เช่น บ้านบางเนียง")
 
     return {
-        "province": province, "district": district.strip(),
-        "subdistrict": subdistrict.strip(), "moo": moo.strip(), "village": village.strip(),
+        "province": province,
+        "district": district.strip() or None,
+        "subdistrict": subdistrict.strip() or None,
+        "moo": moo.strip() or None,
+        "village": village.strip() or None,
     }
 
 
-def _section_deed() -> dict[str, str]:
-    st.markdown("##### 📜 เอกสารสิทธิ์ที่ดิน")
-    deed_type = st.selectbox("ประเภทเอกสารสิทธิ์", list(DEED_TYPES.keys()), key="deed_type")
+def _section_deed() -> dict[str, Any]:
+    st.markdown("##### 📜 การถือครอง / เอกสารสิทธิ์ที่ดิน")
+    deed_type = st.selectbox("ประเภทการถือครอง", list(DEED_TYPES.keys()), key=_k("deed_type"))
 
-    note = DEED_NOTES.get(deed_type)
-    if note:
-        st.caption(note)
+    note_hint = DEED_NOTES.get(deed_type)
+    if note_hint:
+        st.caption(note_hint)
 
-    data: dict[str, str] = {}
+    data: dict[str, Any] = {}
     fields = DEED_TYPES[deed_type]
-    if fields:
-        for i in range(0, len(fields), 3):
-            chunk = fields[i:i + 3]
-            cols = st.columns(len(chunk))
-            for col, (key, label, hint) in zip(cols, chunk):
-                data[key] = col.text_input(label, key=f"deed_{key}", placeholder=hint).strip()
+    for i in range(0, len(fields), 3):
+        chunk = fields[i:i + 3]
+        cols = st.columns(len(chunk))
+        for col, (key, label, hint) in zip(cols, chunk):
+            data[key] = col.text_input(label, key=_k(f"deed_{key}"), placeholder=hint).strip() or None
 
-    return {"deed_type": None if deed_type == DEED_NONE else deed_type, **data}
+    # ---- ช่องบรรยายอิสระ (เด่นเป็นพิเศษเมื่อไม่มีเอกสารสิทธิ์) ----
+    no_deed = deed_type == DEED_NONE
+    if no_deed:
+        st.info("ไม่มีเอกสารสิทธิ์ — แนะนำให้บันทึกรายละเอียดการครอบครองไว้ในช่องด้านล่าง "
+                "เพื่อใช้อ้างอิงภายในครอบครัวและวางแผนดำเนินการต่อ")
+
+    deed_note = st.text_area(
+        "✍️ รายละเอียด / หมายเหตุการครอบครอง" + (" *" if no_deed else " (ถ้ามี)"),
+        key=_k("deed_note"),
+        height=120,
+        placeholder=(
+            "เช่น ด้านบนติดเขตอุทยาน ลุงวีให้ทำกิน 5 ไร่\n"
+            "ด้านล่างทำกินอยู่ใน ส.ค.1 ชื่อลุงหนุ่ย อยู่ระหว่างขอออกโฉนดในชื่อแม่"
+        ),
+        help="พิมพ์ได้อิสระหลายบรรทัด — ใช้บันทึกที่มา ผู้ให้ทำกิน แนวเขต หรือสถานะการดำเนินเรื่อง",
+    )
+
+    return {
+        "deed_type": None if no_deed else deed_type,
+        "deed_note": deed_note.strip() or None,
+        **data,
+    }
 
 
 def _section_coords() -> tuple[float, float]:
     st.markdown("##### 📍 พิกัดแปลง (ไม่บังคับ)")
     c1, c2 = st.columns(2)
-    lat = c1.number_input("ละติจูด", value=0.0, format="%.6f", key="plot_lat", help="เช่น 8.123456")
-    lng = c2.number_input("ลองจิจูด", value=0.0, format="%.6f", key="plot_lng", help="เช่น 98.123456")
+    lat = c1.number_input("ละติจูด", value=0.0, format="%.6f", key=_k("lat"), help="เช่น 8.123456")
+    lng = c2.number_input("ลองจิจูด", value=0.0, format="%.6f", key=_k("lng"), help="เช่น 98.123456")
     return lat, lng
 
 
 # ---------------------------------------------------------
 def _clean_crop_rows(edited: pd.DataFrame) -> list[dict]:
-    """แปลงตารางที่ผู้ใช้กรอกเป็น list พร้อมบันทึก"""
+    """แปลงตารางที่กรอกเป็น list พร้อมบันทึก — ข้ามแถวที่ยังไม่เลือกชนิดพืช"""
     rows: list[dict] = []
     for _, r in edited.iterrows():
         crop = r.get("ชนิดพืช")
-        if not crop or (isinstance(crop, float) and pd.isna(crop)):
+        if _is_blank(crop):
             continue
         rows.append({
-            "crop_type": str(crop),
+            "crop_type": str(crop).strip(),
             "variety": (str(r.get("สายพันธุ์") or "").strip() or None),
-            "area_rai": float(r.get("พื้นที่ (ไร่)") or 0) or None,
-            "tree_count": int(r.get("จำนวนต้น") or 0) or None,
-            "planted_year": int(r["ปีที่ปลูก (พ.ศ.)"]) if pd.notna(r.get("ปีที่ปลูก (พ.ศ.)")) else None,
+            "area_rai": _safe_float(r.get("พื้นที่ (ไร่)")),
+            "tree_count": _safe_int(r.get("จำนวนต้น")),
+            "planted_year": _safe_int(r.get("ปีที่ปลูก (พ.ศ.)")),
         })
     return rows
 
 
 def _main_crop(rows: list[dict]) -> str:
-    """พืชหลัก = พืชที่ใช้พื้นที่มากที่สุด (ใช้กับกราฟและรายงานเดิม)"""
+    """พืชหลัก = ชนิดที่ใช้พื้นที่มากสุด (ถ้าไม่ระบุพื้นที่ ใช้ชนิดแรก)"""
     return max(rows, key=lambda r: r["area_rai"] or 0)["crop_type"]
 
 
@@ -222,7 +282,6 @@ def _plot_form() -> None:
     if not st.button("💾 บันทึกข้อมูลแปลง", type="primary", use_container_width=True):
         return
 
-    # ---------- ตรวจความถูกต้อง ----------
     name = plot_name.strip()
     crop_rows = _clean_crop_rows(edited)
 
@@ -230,10 +289,13 @@ def _plot_form() -> None:
         st.warning("กรุณากรอกชื่อแปลง")
         return
     if not crop_rows:
-        st.warning("กรุณาเลือกชนิดพืชอย่างน้อย 1 ชนิด")
+        st.warning("กรุณาเลือกชนิดพืชอย่างน้อย 1 ชนิดในตารางพืช")
         return
     if total_rai <= 0:
-        st.warning("กรุณาระบุเนื้อที่แปลง (ไร่/งาน/ตารางวา)")
+        st.warning("กรุณาระบุเนื้อที่แปลง (ไร่ / งาน / ตารางวา)")
+        return
+    if deed["deed_type"] is None and not deed["deed_note"]:
+        st.warning("แปลงที่ไม่มีเอกสารสิทธิ์ กรุณาระบุรายละเอียดการครอบครองด้วยครับ")
         return
 
     crop_area = sum(r["area_rai"] or 0 for r in crop_rows)
@@ -241,7 +303,6 @@ def _plot_form() -> None:
         st.warning(f"พื้นที่พืชรวม {crop_area:,.2f} ไร่ มากกว่าเนื้อที่แปลง {total_rai:,.2f} ไร่ กรุณาตรวจสอบ")
         return
 
-    # ---------- บันทึกแปลง ----------
     payload = {
         "plot_name": name,
         "crop_type": _main_crop(crop_rows),
@@ -261,10 +322,9 @@ def _plot_form() -> None:
         st.warning("บันทึกแปลงสำเร็จ แต่บันทึกรายการพืชไม่สำเร็จ กรุณาเพิ่มพืชอีกครั้ง")
         return
 
-    finish(
-        f"บันทึกแปลง '{name}' พร้อมพืช {len(crop_rows)} ชนิด สำเร็จแล้ว!",
-        reset_keys=FORM_KEYS,
-    )
+    # เพิ่มเวอร์ชัน = ฟอร์มทั้งชุดถูกสร้างใหม่แบบว่าง (ปลอดภัยกว่าการลบ session key)
+    st.session_state[VERSION_KEY] = st.session_state.get(VERSION_KEY, 0) + 1
+    finish(f"บันทึกแปลง '{name}' พร้อมพืช {len(crop_rows)} ชนิด สำเร็จแล้ว!")
 
 
 # ---------------------------------------------------------
