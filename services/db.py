@@ -43,17 +43,13 @@ def insert_row(table: str, payload: dict[str, Any], success_msg: str) -> None:
     st.rerun()
 
 
-def delete_row(table: str, row_id: int, success_msg: str = "ลบข้อมูลเรียบร้อย") -> None:
-    """ลบแถวตาม id (เตรียมไว้ใช้กับปุ่มลบในอนาคต)."""
+def delete_silent(table: str, row_id: int) -> None:
+    """ลบแถวแบบเงียบ ๆ ใช้สำหรับ rollback — ไม่แสดง error ให้ผู้ใช้"""
     try:
         get_client().table(table).delete().eq("id", row_id).execute()
-    except Exception as exc:  # noqa: BLE001
-        st.error(f"ลบไม่สำเร็จ: {exc}")
-        return
+    except Exception:  # noqa: BLE001, S110
+        pass
 
-    st.cache_data.clear()
-    st.session_state["flash"] = success_msg
-    st.rerun()
 
 def _clean(payload: dict[str, Any]) -> dict[str, Any]:
     """ตัดค่าว่างออกก่อนส่งเข้าฐานข้อมูล"""
