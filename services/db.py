@@ -84,9 +84,9 @@ def insert_many(table: str, rows: list[dict[str, Any]]) -> bool:
 
 
 def finish(success_msg: str, reset_keys: list[str] | None = None) -> None:
-    """ล้าง cache + รีเซ็ตฟอร์ม + แจ้งผล แล้ว rerun"""
     for key in reset_keys or []:
         st.session_state.pop(key, None)
     st.cache_data.clear()
     st.session_state["flash"] = success_msg
     st.rerun()
+
