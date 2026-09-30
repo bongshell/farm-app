@@ -143,13 +143,18 @@ def _section_basic() -> tuple[str, float, float, float, float]:
     plot_name = st.text_input("ชื่อแปลง *", key=_k("plot_name"),
                               placeholder="เช่น สวนเขาบางเนียง, แปลงหน้าบ้าน")
 
-    st.caption("เนื้อที่ตามเอกสารสิทธิ์ หรือประมาณการถ้าไม่มีเอกสาร (1 ไร่ = 4 งาน = 400 ตร.ว.)")
+    st.caption(
+        "เนื้อที่แปลง — **ไม่บังคับ** เว้นว่างไว้ได้ถ้ายังไม่ทราบ "
+        "(1 ไร่ = 4 งาน = 400 ตร.ว.)"
+    )
     c1, c2, c3, c4 = st.columns(4)
     rai = c1.number_input("ไร่", min_value=0.0, step=1.0, key=_k("rai"))
     ngan = c2.number_input("งาน", min_value=0.0, max_value=3.0, step=1.0, key=_k("ngan"))
     wa = c3.number_input("ตารางวา", min_value=0.0, max_value=99.0, step=1.0, key=_k("wa"))
+
     total_rai = rai + ngan / 4 + wa / 400
-    c4.metric("รวมเป็นไร่", f"{total_rai:,.3f}")
+    c4.metric("รวมเป็นไร่", f"{total_rai:,.3f}" if total_rai > 0 else "ยังไม่ระบุ")
+
     return plot_name, rai, ngan, wa, total_rai
 
 
@@ -291,26 +296,34 @@ def _plot_form() -> None:
     if not crop_rows:
         st.warning("กรุณาเลือกชนิดพืชอย่างน้อย 1 ชนิดในตารางพืช")
         return
-    if total_rai <= 0:
-        st.warning("กรุณาระบุเนื้อที่แปลง (ไร่ / งาน / ตารางวา)")
-        return
     if deed["deed_type"] is None and not deed["deed_note"]:
         st.warning("แปลงที่ไม่มีเอกสารสิทธิ์ กรุณาระบุรายละเอียดการครอบครองด้วยครับ")
         return
 
-    crop_area = sum(r["area_rai"] or 0 for r in crop_rows)
-    if crop_area > total_rai + 0.01:
-        st.warning(f"พื้นที่พืชรวม {crop_area:,.2f} ไร่ มากกว่าเนื้อที่แปลง {total_rai:,.2f} ไร่ กรุณาตรวจสอบ")
+        crop_area = sum(r["area_rai"] or 0 for r in crop_rows)
+
+    # ตรวจพื้นที่เกินเฉพาะกรณีที่ระบุเนื้อที่แปลงไว้
+    if total_rai > 0 and crop_area > total_rai + 0.01:
+        st.warning(
+            f"พื้นที่พืชรวม {crop_area:,.2f} ไร่ มากกว่าเนื้อที่แปลง {total_rai:,.2f} ไร่ กรุณาตรวจสอบ"
+        )
         return
 
-    payload = {
+    # ถ้าไม่ได้ระบุเนื้อที่แปลง แต่กรอกพื้นที่รายพืชไว้ → ใช้ผลรวมรายพืชแทน
+    effective_area = total_rai if total_rai > 0 else crop_area
+
+        payload = {
         "plot_name": name,
         "crop_type": _main_crop(crop_rows),
         "is_mixed": len(crop_rows) > 1,
-        "area_rai": round(total_rai, 3),
-        "rai": rai or None, "ngan": ngan or None, "wa": wa or None,
-        "lat": lat or None, "lng": lng or None,
-        **location, **deed,
+        "area_rai": round(effective_area, 3) if effective_area > 0 else None,
+        "rai": rai or None,
+        "ngan": ngan or None,
+        "wa": wa or None,
+        "lat": lat or None,
+        "lng": lng or None,
+        **location,
+        **deed,
     }
 
     created = insert_returning(TBL_PLOTS, payload)
