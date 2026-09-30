@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any          # ← บรรทัดที่ขาดไปรอบก่อน
+from typing import Any
 
 import pandas as pd
 import streamlit as st
@@ -29,10 +29,10 @@ EMPTY_CROPS = pd.DataFrame(
 
 
 # ---------------------------------------------------------
-# ตัวช่วย: key ที่รีเซ็ตได้ + แปลงชนิดข้อมูลแบบปลอดภัย
+# ตัวช่วย
 # ---------------------------------------------------------
 def _k(name: str) -> str:
-    """สร้าง key ที่มีเลขเวอร์ชันต่อท้าย — เพิ่มเวอร์ชัน = ฟอร์มว่างใหม่ทั้งชุด"""
+    """key ที่มีเลขเวอร์ชันต่อท้าย — เพิ่มเวอร์ชัน = ฟอร์มว่างใหม่ทั้งชุด"""
     return f"{name}_v{st.session_state.get(VERSION_KEY, 0)}"
 
 
@@ -46,7 +46,6 @@ def _is_blank(val: Any) -> bool:
 
 
 def _safe_float(val: Any) -> float | None:
-    """แปลงเป็น float — NaN / ว่าง / ข้อความมั่ว คืน None แทนที่จะพัง"""
     if _is_blank(val):
         return None
     try:
@@ -67,6 +66,7 @@ def _safe_int(val: Any) -> int | None:
 def _crop_summary(crops_df: pd.DataFrame) -> dict[int, str]:
     if crops_df.empty or "plot_id" not in crops_df.columns:
         return {}
+
     summary: dict[int, str] = {}
     for plot_id, grp in crops_df.groupby("plot_id"):
         parts = []
@@ -89,7 +89,10 @@ def _plot_list(plots_df: pd.DataFrame) -> None:
     summary = _crop_summary(crops_df)
 
     view = plots_df.copy()
-    view["พืชในแปลง"] = view["id"].map(summary).fillna("—") if "id" in view.columns else "—"
+    if "id" in view.columns:
+        view["พืชในแปลง"] = view["id"].map(summary).fillna("—")
+    else:
+        view["พืชในแปลง"] = "—"
 
     cols_map = {
         "plot_name": "ชื่อแปลง",
@@ -102,15 +105,19 @@ def _plot_list(plots_df: pd.DataFrame) -> None:
         "province": "จังหวัด",
     }
     show = [c for c in cols_map if c in view.columns]
-    st.dataframe(view[show].rename(columns=cols_map),
-                 use_container_width=True, hide_index=True)
+    st.dataframe(
+        view[show].rename(columns=cols_map),
+        use_container_width=True,
+        hide_index=True,
+    )
 
     total_area = pd.to_numeric(view.get("area_rai"), errors="coerce").fillna(0).sum()
     st.caption(f"ทั้งหมด {len(plots_df)} แปลง • รวม {total_area:,.2f} ไร่")
 
-    # แสดงหมายเหตุการครอบครองของแปลงที่มีบันทึกไว้
     if "deed_note" in view.columns:
-        noted = view[view["deed_note"].notna() & (view["deed_note"].astype(str).str.strip() != "")]
+        noted = view[
+            view["deed_note"].notna() & (view["deed_note"].astype(str).str.strip() != "")
+        ]
         if not noted.empty:
             with st.expander(f"📝 หมายเหตุการครอบครอง ({len(noted)} แปลง)"):
                 for _, row in noted.iterrows():
@@ -124,15 +131,23 @@ def _plot_list(plots_df: pd.DataFrame) -> None:
         else:
             merged = crops_df.merge(
                 plots_df[["id", "plot_name"]].rename(columns={"id": "plot_id"}),
-                on="plot_id", how="left",
+                on="plot_id",
+                how="left",
             )
             detail_map = {
-                "plot_name": "ชื่อแปลง", "crop_type": "ชนิดพืช", "variety": "สายพันธุ์",
-                "area_rai": "พื้นที่ (ไร่)", "tree_count": "จำนวนต้น", "planted_year": "ปีที่ปลูก",
+                "plot_name": "ชื่อแปลง",
+                "crop_type": "ชนิดพืช",
+                "variety": "สายพันธุ์",
+                "area_rai": "พื้นที่ (ไร่)",
+                "tree_count": "จำนวนต้น",
+                "planted_year": "ปีที่ปลูก",
             }
             cols = [c for c in detail_map if c in merged.columns]
-            st.dataframe(merged[cols].rename(columns=detail_map),
-                         use_container_width=True, hide_index=True)
+            st.dataframe(
+                merged[cols].rename(columns=detail_map),
+                use_container_width=True,
+                hide_index=True,
+            )
 
 
 # ---------------------------------------------------------
@@ -140,13 +155,13 @@ def _plot_list(plots_df: pd.DataFrame) -> None:
 # ---------------------------------------------------------
 def _section_basic() -> tuple[str, float, float, float, float]:
     st.markdown("##### 📌 ข้อมูลทั่วไป")
-    plot_name = st.text_input("ชื่อแปลง *", key=_k("plot_name"),
-                              placeholder="เช่น สวนเขาบางเนียง, แปลงหน้าบ้าน")
-
-    st.caption(
-        "เนื้อที่แปลง — **ไม่บังคับ** เว้นว่างไว้ได้ถ้ายังไม่ทราบ "
-        "(1 ไร่ = 4 งาน = 400 ตร.ว.)"
+    plot_name = st.text_input(
+        "ชื่อแปลง *",
+        key=_k("plot_name"),
+        placeholder="เช่น สวนเขาบางเนียง, แปลงหน้าบ้าน",
     )
+
+    st.caption("เนื้อที่แปลง — ไม่บังคับ เว้นว่างไว้ได้ถ้ายังไม่ทราบ (1 ไร่ = 4 งาน = 400 ตร.ว.)")
     c1, c2, c3, c4 = st.columns(4)
     rai = c1.number_input("ไร่", min_value=0.0, step=1.0, key=_k("rai"))
     ngan = c2.number_input("งาน", min_value=0.0, max_value=3.0, step=1.0, key=_k("ngan"))
@@ -170,10 +185,13 @@ def _section_crops() -> pd.DataFrame:
         column_config={
             "ชนิดพืช": st.column_config.SelectboxColumn(options=CROP_OPTIONS, width="medium"),
             "สายพันธุ์": st.column_config.TextColumn(
-                help="เช่น หมอนทอง, ชะนี, RRIM 600, เทเนอรา", width="medium"),
+                help="เช่น หมอนทอง, ชะนี, RRIM 600, เทเนอรา", width="medium"
+            ),
             "พื้นที่ (ไร่)": st.column_config.NumberColumn(min_value=0.0, step=0.5, format="%.2f"),
             "จำนวนต้น": st.column_config.NumberColumn(min_value=0, step=1),
-            "ปีที่ปลูก (พ.ศ.)": st.column_config.NumberColumn(min_value=2500, max_value=2600, step=1),
+            "ปีที่ปลูก (พ.ศ.)": st.column_config.NumberColumn(
+                min_value=2500, max_value=2600, step=1
+            ),
         },
     )
 
@@ -182,7 +200,9 @@ def _section_location() -> dict[str, Any]:
     st.markdown("##### 🏠 ที่ตั้งแปลง")
     c1, c2, c3 = st.columns(3)
     province = c1.selectbox(
-        "จังหวัด", PROVINCES, key=_k("prov"),
+        "จังหวัด",
+        PROVINCES,
+        key=_k("prov"),
         index=PROVINCES.index(DEFAULT_PROVINCE) if DEFAULT_PROVINCE in PROVINCES else 0,
     )
     district = c2.text_input("อำเภอ", key=_k("district"), placeholder="เช่น ตะกั่วป่า")
@@ -215,13 +235,15 @@ def _section_deed() -> dict[str, Any]:
         chunk = fields[i:i + 3]
         cols = st.columns(len(chunk))
         for col, (key, label, hint) in zip(cols, chunk):
-            data[key] = col.text_input(label, key=_k(f"deed_{key}"), placeholder=hint).strip() or None
+            value = col.text_input(label, key=_k(f"deed_{key}"), placeholder=hint)
+            data[key] = value.strip() or None
 
-    # ---- ช่องบรรยายอิสระ (เด่นเป็นพิเศษเมื่อไม่มีเอกสารสิทธิ์) ----
     no_deed = deed_type == DEED_NONE
     if no_deed:
-        st.info("ไม่มีเอกสารสิทธิ์ — แนะนำให้บันทึกรายละเอียดการครอบครองไว้ในช่องด้านล่าง "
-                "เพื่อใช้อ้างอิงภายในครอบครัวและวางแผนดำเนินการต่อ")
+        st.info(
+            "ไม่มีเอกสารสิทธิ์ — แนะนำให้บันทึกรายละเอียดการครอบครองไว้ในช่องด้านล่าง "
+            "เพื่อใช้อ้างอิงภายในครอบครัวและวางแผนดำเนินการต่อ"
+        )
 
     deed_note = st.text_area(
         "✍️ รายละเอียด / หมายเหตุการครอบครอง" + (" *" if no_deed else " (ถ้ามี)"),
@@ -251,24 +273,24 @@ def _section_coords() -> tuple[float, float]:
 
 # ---------------------------------------------------------
 def _clean_crop_rows(edited: pd.DataFrame) -> list[dict]:
-    """แปลงตารางที่กรอกเป็น list พร้อมบันทึก — ข้ามแถวที่ยังไม่เลือกชนิดพืช"""
     rows: list[dict] = []
     for _, r in edited.iterrows():
         crop = r.get("ชนิดพืช")
         if _is_blank(crop):
             continue
-        rows.append({
-            "crop_type": str(crop).strip(),
-            "variety": (str(r.get("สายพันธุ์") or "").strip() or None),
-            "area_rai": _safe_float(r.get("พื้นที่ (ไร่)")),
-            "tree_count": _safe_int(r.get("จำนวนต้น")),
-            "planted_year": _safe_int(r.get("ปีที่ปลูก (พ.ศ.)")),
-        })
+        rows.append(
+            {
+                "crop_type": str(crop).strip(),
+                "variety": (str(r.get("สายพันธุ์") or "").strip() or None),
+                "area_rai": _safe_float(r.get("พื้นที่ (ไร่)")),
+                "tree_count": _safe_int(r.get("จำนวนต้น")),
+                "planted_year": _safe_int(r.get("ปีที่ปลูก (พ.ศ.)")),
+            }
+        )
     return rows
 
 
 def _main_crop(rows: list[dict]) -> str:
-    """พืชหลัก = ชนิดที่ใช้พื้นที่มากสุด (ถ้าไม่ระบุพื้นที่ ใช้ชนิดแรก)"""
     return max(rows, key=lambda r: r["area_rai"] or 0)["crop_type"]
 
 
@@ -293,26 +315,26 @@ def _plot_form() -> None:
     if not name:
         st.warning("กรุณากรอกชื่อแปลง")
         return
+
     if not crop_rows:
         st.warning("กรุณาเลือกชนิดพืชอย่างน้อย 1 ชนิดในตารางพืช")
         return
+
     if deed["deed_type"] is None and not deed["deed_note"]:
         st.warning("แปลงที่ไม่มีเอกสารสิทธิ์ กรุณาระบุรายละเอียดการครอบครองด้วยครับ")
         return
 
-        crop_area = sum(r["area_rai"] or 0 for r in crop_rows)
+    crop_area = sum(r["area_rai"] or 0 for r in crop_rows)
 
-    # ตรวจพื้นที่เกินเฉพาะกรณีที่ระบุเนื้อที่แปลงไว้
     if total_rai > 0 and crop_area > total_rai + 0.01:
         st.warning(
             f"พื้นที่พืชรวม {crop_area:,.2f} ไร่ มากกว่าเนื้อที่แปลง {total_rai:,.2f} ไร่ กรุณาตรวจสอบ"
         )
         return
 
-    # ถ้าไม่ได้ระบุเนื้อที่แปลง แต่กรอกพื้นที่รายพืชไว้ → ใช้ผลรวมรายพืชแทน
     effective_area = total_rai if total_rai > 0 else crop_area
 
-        payload = {
+    payload = {
         "plot_name": name,
         "crop_type": _main_crop(crop_rows),
         "is_mixed": len(crop_rows) > 1,
@@ -335,7 +357,6 @@ def _plot_form() -> None:
         st.warning("บันทึกแปลงสำเร็จ แต่บันทึกรายการพืชไม่สำเร็จ กรุณาเพิ่มพืชอีกครั้ง")
         return
 
-    # เพิ่มเวอร์ชัน = ฟอร์มทั้งชุดถูกสร้างใหม่แบบว่าง (ปลอดภัยกว่าการลบ session key)
     st.session_state[VERSION_KEY] = st.session_state.get(VERSION_KEY, 0) + 1
     finish(f"บันทึกแปลง '{name}' พร้อมพืช {len(crop_rows)} ชนิด สำเร็จแล้ว!")
 
@@ -347,5 +368,6 @@ def render(plots_df: pd.DataFrame) -> None:
 
     with tab_list:
         _plot_list(plots_df)
+
     with tab_add:
         _plot_form()
