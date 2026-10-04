@@ -172,20 +172,28 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
         st.warning("กรุณาเพิ่มร้านค้าก่อนที่แท็บ '🏪 ร้านค้า' เพื่อให้แก้ไขราคาได้ครับ")
         return
 
+    # ตัดคอลัมน์ shop_name เดิมที่อาจค้างอยู่ใน prices_df ออกก่อน กันชื่อชนกันตอน merge
     prices_df = prices_df.copy()
-    shop_lookup = shops_df[["id", "shop_name"]].copy()
+    if "shop_name" in prices_df.columns:
+        prices_df = prices_df.drop(columns=["shop_name"])
 
     prices_df["shop_id"] = pd.to_numeric(prices_df.get("shop_id"), errors="coerce")
-    shop_lookup["id"] = pd.to_numeric(shop_lookup["id"], errors="coerce")
 
-    merged = prices_df.merge(
-        shop_lookup.rename(columns={"id": "shop_id"}), on="shop_id", how="left"
-    )
-    merged["label"] = (
-        merged.get("price_date", "").astype(str) + " | "
-        + merged.get("shop_name", "").fillna("-") + " | "
-        + merged.get("product_name", "").fillna("-")
-    )
+    shop_lookup = shops_df[["id", "shop_name"]].copy()
+    shop_lookup["id"] = pd.to_numeric(shop_lookup["id"], errors="coerce")
+    shop_lookup = shop_lookup.rename(columns={"id": "shop_id"})
+
+    merged = prices_df.merge(shop_lookup, on="shop_id", how="left")
+
+    # กันเหนียวอีกชั้น: ถ้ายังไม่มีคอลัมน์ shop_name ด้วยเหตุผลใดก็ตาม ให้สร้างเป็นค่าว่าง
+    if "shop_name" not in merged.columns:
+        merged["shop_name"] = "-"
+    merged["shop_name"] = merged["shop_name"].fillna("-")
+
+    date_col = merged["price_date"].astype(str) if "price_date" in merged.columns else ""
+    product_col = merged["product_name"].fillna("-") if "product_name" in merged.columns else "-"
+
+    merged["label"] = date_col + " | " + merged["shop_name"] + " | " + product_col
 
     selected_label = st.selectbox("เลือกรายการ", merged["label"], key=_k("price_select"))
     row = merged.loc[merged["label"] == selected_label].iloc[0]
