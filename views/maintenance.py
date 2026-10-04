@@ -19,7 +19,6 @@ from services.db import (
     delete_row,
     fetch_table,
     finish,
-    insert_returning,
     insert_row,
     update_row_silent,
 )
@@ -29,10 +28,6 @@ VERSION_KEY = "maint_form_version"
 
 def _k(name: str) -> str:
     return f"{name}_v{st.session_state.get(VERSION_KEY, 0)}"
-
-
-def _bump_version() -> None:
-    st.session_state[VERSION_KEY] = st.session_state.get(VERSION_KEY, 0) + 1
 
 
 # =========================================================
@@ -180,21 +175,11 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
     prices_df = prices_df.copy()
     shop_lookup = shops_df[["id", "shop_name"]].copy()
 
-    # บังคับให้คีย์สำหรับ merge เป็นชนิดเดียวกันเสมอ (ป้องกัน ValueError)
     prices_df["shop_id"] = pd.to_numeric(prices_df.get("shop_id"), errors="coerce")
     shop_lookup["id"] = pd.to_numeric(shop_lookup["id"], errors="coerce")
 
     merged = prices_df.merge(
         shop_lookup.rename(columns={"id": "shop_id"}), on="shop_id", how="left"
-    )
-
-        return
-
-
-    merged = prices_df.merge(
-
-        shops_df[["id", "shop_name"]].rename(columns={"id": "shop_id"}), on="shop_id", how="left"
-
     )
     merged["label"] = (
         merged.get("price_date", "").astype(str) + " | "
@@ -284,11 +269,8 @@ def _price_history(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
         merged = prices_df.copy()
         merged["shop_name"] = "—"
 
-
     f1, f2 = st.columns(2)
-
     shop_options = ["ทั้งหมด"] + (shops_df["shop_name"].tolist() if has_shops else [])
-
     filter_shop = f1.selectbox("กรองตามร้านค้า", shop_options)
     filter_cat = f2.selectbox("กรองตามหมวดหมู่", ["ทั้งหมด"] + PRODUCT_CATEGORIES)
 
