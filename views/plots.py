@@ -371,20 +371,6 @@ def _plot_form() -> None:
     st.session_state[VERSION_KEY] = st.session_state.get(VERSION_KEY, 0) + 1
     finish(f"บันทึกแปลง '{name}' พร้อมพืช {len(crop_rows)} ชนิด สำเร็จแล้ว!")
 
-
-# ---------------------------------------------------------
-def render(plots_df: pd.DataFrame) -> None:
-    st.header("🗂️ การจัดการแปลงเกษตรกรรม")
-    tab_list, tab_add, tab_edit = st.tabs(
-        ["รายชื่อแปลงทั้งหมด", "➕ เพิ่มแปลงใหม่", "✏️ แก้ไข/ลบแปลง"]
-    )
-    with tab_list:
-        _plot_list(plots_df)
-    with tab_add:
-        _plot_form()
-    with tab_edit:
-        _edit_form(plots_df)
-
 def _edit_form(plots_df: pd.DataFrame) -> None:
     st.markdown("##### เลือกแปลงที่ต้องการแก้ไข")
 
@@ -491,3 +477,18 @@ def _edit_form(plots_df: pd.DataFrame) -> None:
         if cc2.button("❌ ยกเลิก"):
             st.session_state[f"confirm_delete_{plot_id}"] = False
             st.rerun()
+
+# ---------------------------------------------------------
+def render(plots_df: pd.DataFrame) -> None:
+    st.header("🗂️ การจัดการแปลงเกษตรกรรม")
+    tab_list, tab_add, tab_edit = st.tabs(
+        ["รายชื่อแปลงทั้งหมด", "➕ เพิ่มแปลงใหม่", "✏️ แก้ไข/ลบแปลง"]
+    )
+    with tab_list:
+        _plot_list(plots_df)
+    with tab_add:
+        _plot_form()
+    with tab_edit:
+        _edit_form(plots_df)
+
+
