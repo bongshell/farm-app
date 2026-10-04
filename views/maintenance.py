@@ -167,14 +167,28 @@ def _price_form(shops_df: pd.DataFrame) -> None:
 
 
 def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
+
     st.markdown("##### ✏️ แก้ไข / ลบประวัติราคา")
 
+
     if prices_df.empty:
+
         empty_state("ยังไม่มีประวัติราคาที่บันทึกไว้")
+
         return
 
+
+    if shops_df.empty or "shop_name" not in shops_df.columns:
+
+        st.warning("กรุณาเพิ่มร้านค้าก่อนที่แท็บ '🏪 ร้านค้า' เพื่อให้แก้ไขราคาได้ครับ")
+
+        return
+
+
     merged = prices_df.merge(
+
         shops_df[["id", "shop_name"]].rename(columns={"id": "shop_id"}), on="shop_id", how="left"
+
     )
     merged["label"] = (
         merged.get("price_date", "").astype(str) + " | "
@@ -244,17 +258,39 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
 
 
 def _price_history(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
+
     st.markdown("##### 📋 ประวัติราคาทั้งหมด")
+
     if prices_df.empty:
+
         empty_state("ยังไม่มีประวัติราคา")
+
         return
 
-    merged = prices_df.merge(
-        shops_df[["id", "shop_name"]].rename(columns={"id": "shop_id"}), on="shop_id", how="left"
-    )
+
+    has_shops = not shops_df.empty and "shop_name" in shops_df.columns
+
+
+    if has_shops:
+
+        merged = prices_df.merge(
+
+            shops_df[["id", "shop_name"]].rename(columns={"id": "shop_id"}), on="shop_id", how="left"
+
+        )
+
+    else:
+
+        merged = prices_df.copy()
+
+        merged["shop_name"] = "—"
+
 
     f1, f2 = st.columns(2)
-    filter_shop = f1.selectbox("กรองตามร้านค้า", ["ทั้งหมด"] + shops_df["shop_name"].tolist())
+
+    shop_options = ["ทั้งหมด"] + (shops_df["shop_name"].tolist() if has_shops else [])
+
+    filter_shop = f1.selectbox("กรองตามร้านค้า", shop_options)
     filter_cat = f2.selectbox("กรองตามหมวดหมู่", ["ทั้งหมด"] + PRODUCT_CATEGORIES)
 
     view = merged.copy()
