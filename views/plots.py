@@ -19,11 +19,14 @@ from config.constants import (
     TBL_PLOTS,
 )
 from services.db import (
+    delete_row,
     delete_silent,
     fetch_table,
     finish,
     insert_many,
     insert_returning,
+    replace_crops,
+    update_row,
 )
 
 VERSION_KEY = "plot_form_version"
@@ -372,10 +375,119 @@ def _plot_form() -> None:
 # ---------------------------------------------------------
 def render(plots_df: pd.DataFrame) -> None:
     st.header("🗂️ การจัดการแปลงเกษตรกรรม")
-    tab_list, tab_add = st.tabs(["รายชื่อแปลงทั้งหมด", "➕ เพิ่มแปลงใหม่"])
-
+    tab_list, tab_add, tab_edit = st.tabs(
+        ["รายชื่อแปลงทั้งหมด", "➕ เพิ่มแปลงใหม่", "✏️ แก้ไข/ลบแปลง"]
+    )
     with tab_list:
         _plot_list(plots_df)
-
     with tab_add:
         _plot_form()
+    with tab_edit:
+        _edit_form(plots_df)
+
+def _edit_form(plots_df: pd.DataFrame) -> None:
+    st.markdown("##### เลือกแปลงที่ต้องการแก้ไข")
+
+    if plots_df.empty:
+        empty_state("ยังไม่มีแปลงให้แก้ไข")
+        return
+
+    selected_name = st.selectbox(
+        "แปลง", plots_df["plot_name"], key="edit_select_plot"
+    )
+    plot = plots_df.loc[plots_df["plot_name"] == selected_name].iloc[0]
+    plot_id = int(plot["id"])
+
+    st.divider()
+
+    # ---- ข้อมูลทั่วไป ----
+    name = st.text_input("ชื่อแปลง *", value=str(plot.get("plot_name") or ""))
+
+    c1, c2, c3 = st.columns(3)
+    rai = c1.number_input("ไร่", min_value=0.0, step=1.0, value=float(plot.get("rai") or 0))
+    ngan = c2.number_input("งาน", min_value=0.0, max_value=3.0, step=1.0, value=float(plot.get("ngan") or 0))
+    wa = c3.number_input("ตารางวา", min_value=0.0, max_value=99.0, step=1.0, value=float(plot.get("wa") or 0))
+
+    st.divider()
+
+    # ---- พืชในแปลง ----
+    st.markdown("##### 🌱 ชนิดพืชในแปลง")
+    crops_df = fetch_table(TBL_PLOT_CROPS)
+    current_crops = crops_df[crops_df["plot_id"] == plot_id] if not crops_df.empty else pd.DataFrame()
+
+    if current_crops.empty:
+        edit_table = EMPTY_CROPS.copy()
+    else:
+        edit_table = pd.DataFrame({
+            "ชนิดพืช": current_crops["crop_type"].values,
+            "สายพันธุ์": current_crops.get("variety", pd.Series(dtype=str)).fillna("").values,
+            "พื้นที่ (ไร่)": current_crops.get("area_rai"),
+            "จำนวนต้น": current_crops.get("tree_count"),
+            "ปีที่ปลูก (พ.ศ.)": current_crops.get("planted_year"),
+        })
+
+    edited = st.data_editor(
+        edit_table,
+        key=f"edit_crop_editor_{plot_id}",
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config={
+            "ชนิดพืช": st.column_config.SelectboxColumn(options=CROP_OPTIONS, width="medium"),
+            "พื้นที่ (ไร่)": st.column_config.NumberColumn(min_value=0.0, step=0.5, format="%.2f"),
+            "จำนวนต้น": st.column_config.NumberColumn(min_value=0, step=1),
+            "ปีที่ปลูก (พ.ศ.)": st.column_config.NumberColumn(min_value=2500, max_value=2600, step=1),
+        },
+    )
+
+    st.divider()
+
+    # ---- เอกสารสิทธิ์ / หมายเหตุ ----
+    deed_note = st.text_area(
+        "✍️ รายละเอียด / หมายเหตุการครอบครอง",
+        value=str(plot.get("deed_note") or ""),
+        height=100,
+    )
+
+    st.divider()
+    col_save, col_delete = st.columns([3, 1])
+
+    if col_save.button("💾 บันทึกการแก้ไข", type="primary", use_container_width=True):
+        crop_rows = _clean_crop_rows(edited)
+        if not name.strip():
+            st.warning("กรุณากรอกชื่อแปลง")
+            return
+        if not crop_rows:
+            st.warning("กรุณามีชนิดพืชอย่างน้อย 1 ชนิด")
+            return
+
+        total_rai = rai + ngan / 4 + wa / 400
+        crop_area = sum(r["area_rai"] or 0 for r in crop_rows)
+        effective_area = total_rai if total_rai > 0 else crop_area
+
+        update_row(
+            TBL_PLOTS, plot_id,
+            {
+                "plot_name": name.strip(),
+                "crop_type": crop_rows[0]["crop_type"],
+                "is_mixed": len(crop_rows) > 1,
+                "area_rai": round(effective_area, 3) if effective_area > 0 else None,
+                "rai": rai or None, "ngan": ngan or None, "wa": wa or None,
+                "deed_note": deed_note.strip() or None,
+            },
+            "",  # ยังไม่ finish ตรงนี้ รอทำ replace_crops ก่อน
+        )
+        crops_payload = [{**r, "plot_id": plot_id} for r in crop_rows]
+        if replace_crops(plot_id, crops_payload):
+            finish(f"แก้ไขแปลง '{name.strip()}' สำเร็จแล้ว!")
+
+    if col_delete.button("🗑️ ลบแปลงนี้", use_container_width=True):
+        st.session_state[f"confirm_delete_{plot_id}"] = True
+
+    if st.session_state.get(f"confirm_delete_{plot_id}"):
+        st.error(f"ยืนยันลบแปลง '{selected_name}' พร้อมข้อมูลพืชทั้งหมด? การลบนี้กู้คืนไม่ได้")
+        cc1, cc2 = st.columns(2)
+        if cc1.button("✅ ยืนยันลบ", type="primary"):
+            delete_row(TBL_PLOTS, plot_id, f"ลบแปลง '{selected_name}' เรียบร้อยแล้ว")
+        if cc2.button("❌ ยกเลิก"):
+            st.session_state[f"confirm_delete_{plot_id}"] = False
+            st.rerun()
