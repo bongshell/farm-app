@@ -450,7 +450,8 @@ def _edit_form(plots_df: pd.DataFrame) -> None:
         crop_area = sum(r["area_rai"] or 0 for r in crop_rows)
         effective_area = total_rai if total_rai > 0 else crop_area
 
-        update_row(
+                # ขั้นที่ 1: บันทึกข้อมูลแปลงก่อน แบบไม่รีเฟรชหน้า
+        plot_saved = update_row_silent(
             TBL_PLOTS, plot_id,
             {
                 "plot_name": name.strip(),
@@ -460,12 +461,15 @@ def _edit_form(plots_df: pd.DataFrame) -> None:
                 "rai": rai or None, "ngan": ngan or None, "wa": wa or None,
                 "deed_note": deed_note.strip() or None,
             },
-            "",  # ยังไม่ finish ตรงนี้ รอทำ replace_crops ก่อน
         )
-        crops_payload = [{**r, "plot_id": plot_id} for r in crop_rows]
-        if replace_crops(plot_id, crops_payload):
-            finish(f"แก้ไขแปลง '{name.strip()}' สำเร็จแล้ว!")
 
+        # ขั้นที่ 2: ถ้าขั้นแรกสำเร็จ ค่อยบันทึกข้อมูลพืชต่อ
+        if plot_saved:
+            crops_payload = [{**r, "plot_id": plot_id} for r in crop_rows]
+            if replace_crops(plot_id, crops_payload):
+                # ขั้นที่ 3: ทุกอย่างสำเร็จแล้ว ค่อยรีเฟรชหน้าพร้อมแจ้งผล
+                finish(f"แก้ไขแปลง '{name.strip()}' สำเร็จแล้ว!")
+                
     if col_delete.button("🗑️ ลบแปลงนี้", use_container_width=True):
         st.session_state[f"confirm_delete_{plot_id}"] = True
 
