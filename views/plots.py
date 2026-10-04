@@ -26,7 +26,7 @@ from services.db import (
     insert_many,
     insert_returning,
     replace_crops,
-    update_row,
+    update_row_silent,
 )
 
 VERSION_KEY = "plot_form_version"
