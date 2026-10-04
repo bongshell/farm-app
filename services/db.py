@@ -124,3 +124,13 @@ def replace_crops(plot_id: int, rows: list[dict[str, Any]]) -> bool:
     except Exception as exc:  # noqa: BLE001
         st.error(f"แก้ไขรายการพืชไม่สำเร็จ: {exc}")
         return False
+
+def update_row_silent(table: str, row_id: int, payload: dict[str, Any]) -> bool:
+    """แก้ไขข้อมูล 1 แถว แบบไม่สั่งรีเฟรชหน้าทันที (ใช้ตอนต้องทำงานหลายขั้นตอนต่อกัน)"""
+    clean = {k: v for k, v in payload.items() if v is not None}
+    try:
+        get_client().table(table).update(clean).eq("id", row_id).execute()
+        return True
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"แก้ไขข้อมูลแปลงไม่สำเร็จ: {exc}")
+        return False
