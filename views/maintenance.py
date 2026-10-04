@@ -262,20 +262,24 @@ def _price_history(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
         empty_state("ยังไม่มีประวัติราคา")
         return
 
-    has_shops = not shops_df.empty and "shop_name" in shops_df.columns
     prices_df = prices_df.copy()
+    if "shop_name" in prices_df.columns:
+        prices_df = prices_df.drop(columns=["shop_name"])
+
+    has_shops = not shops_df.empty and "shop_name" in shops_df.columns
 
     if has_shops:
         prices_df["shop_id"] = pd.to_numeric(prices_df.get("shop_id"), errors="coerce")
         shop_lookup = shops_df[["id", "shop_name"]].copy()
         shop_lookup["id"] = pd.to_numeric(shop_lookup["id"], errors="coerce")
-
-        merged = prices_df.merge(
-            shop_lookup.rename(columns={"id": "shop_id"}), on="shop_id", how="left"
-        )
+        shop_lookup = shop_lookup.rename(columns={"id": "shop_id"})
+        merged = prices_df.merge(shop_lookup, on="shop_id", how="left")
     else:
         merged = prices_df.copy()
-        merged["shop_name"] = "—"
+
+    if "shop_name" not in merged.columns:
+        merged["shop_name"] = "-"
+    merged["shop_name"] = merged["shop_name"].fillna("-")
 
     f1, f2 = st.columns(2)
     shop_options = ["ทั้งหมด"] + (shops_df["shop_name"].tolist() if has_shops else [])
@@ -285,7 +289,7 @@ def _price_history(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
     view = merged.copy()
     if filter_shop != "ทั้งหมด":
         view = view[view["shop_name"] == filter_shop]
-    if filter_cat != "ทั้งหมด":
+    if filter_cat != "ทั้งหมด" and "category" in view.columns:
         view = view[view["category"] == filter_cat]
 
     show_cols = {
