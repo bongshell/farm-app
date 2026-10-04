@@ -167,20 +167,26 @@ def _price_form(shops_df: pd.DataFrame) -> None:
 
 
 def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
-
     st.markdown("##### ✏️ แก้ไข / ลบประวัติราคา")
 
-
     if prices_df.empty:
-
         empty_state("ยังไม่มีประวัติราคาที่บันทึกไว้")
-
         return
 
-
     if shops_df.empty or "shop_name" not in shops_df.columns:
-
         st.warning("กรุณาเพิ่มร้านค้าก่อนที่แท็บ '🏪 ร้านค้า' เพื่อให้แก้ไขราคาได้ครับ")
+        return
+
+    prices_df = prices_df.copy()
+    shop_lookup = shops_df[["id", "shop_name"]].copy()
+
+    # บังคับให้คีย์สำหรับ merge เป็นชนิดเดียวกันเสมอ (ป้องกัน ValueError)
+    prices_df["shop_id"] = pd.to_numeric(prices_df.get("shop_id"), errors="coerce")
+    shop_lookup["id"] = pd.to_numeric(shop_lookup["id"], errors="coerce")
+
+    merged = prices_df.merge(
+        shop_lookup.rename(columns={"id": "shop_id"}), on="shop_id", how="left"
+    )
 
         return
 
@@ -258,31 +264,24 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
 
 
 def _price_history(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
-
     st.markdown("##### 📋 ประวัติราคาทั้งหมด")
-
     if prices_df.empty:
-
         empty_state("ยังไม่มีประวัติราคา")
-
         return
 
-
     has_shops = not shops_df.empty and "shop_name" in shops_df.columns
-
+    prices_df = prices_df.copy()
 
     if has_shops:
+        prices_df["shop_id"] = pd.to_numeric(prices_df.get("shop_id"), errors="coerce")
+        shop_lookup = shops_df[["id", "shop_name"]].copy()
+        shop_lookup["id"] = pd.to_numeric(shop_lookup["id"], errors="coerce")
 
         merged = prices_df.merge(
-
-            shops_df[["id", "shop_name"]].rename(columns={"id": "shop_id"}), on="shop_id", how="left"
-
+            shop_lookup.rename(columns={"id": "shop_id"}), on="shop_id", how="left"
         )
-
     else:
-
         merged = prices_df.copy()
-
         merged["shop_name"] = "—"
 
 
