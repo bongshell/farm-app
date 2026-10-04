@@ -86,3 +86,41 @@ def finish(success_msg: str, reset_keys: list[str] | None = None) -> None:
     st.session_state["flash"] = success_msg
     st.rerun()
 
+def update_row(table: str, row_id: int, payload: dict[str, Any], success_msg: str) -> None:
+    """แก้ไขข้อมูล 1 แถวตาม id"""
+    clean = {k: v for k, v in payload.items() if v is not None}
+    try:
+        get_client().table(table).update(clean).eq("id", row_id).execute()
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"แก้ไขไม่สำเร็จ: {exc}")
+        return
+
+    st.cache_data.clear()
+    st.session_state["flash"] = success_msg
+    st.rerun()
+
+
+def delete_row(table: str, row_id: int, success_msg: str = "ลบข้อมูลเรียบร้อย") -> None:
+    """ลบข้อมูล 1 แถวตาม id"""
+    try:
+        get_client().table(table).delete().eq("id", row_id).execute()
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"ลบไม่สำเร็จ: {exc}")
+        return
+
+    st.cache_data.clear()
+    st.session_state["flash"] = success_msg
+    st.rerun()
+
+
+def replace_crops(plot_id: int, rows: list[dict[str, Any]]) -> bool:
+    """ลบพืชเดิมของแปลงทั้งหมด แล้วบันทึกชุดใหม่แทน (ใช้ตอนแก้ไขแปลง)"""
+    try:
+        get_client().table("plot_crops").delete().eq("plot_id", plot_id).execute()
+        if rows:
+            clean_rows = [{k: v for k, v in r.items() if v is not None} for r in rows]
+            get_client().table("plot_crops").insert(clean_rows).execute()
+        return True
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"แก้ไขรายการพืชไม่สำเร็จ: {exc}")
+        return False
