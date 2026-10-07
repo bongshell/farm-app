@@ -186,29 +186,20 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
     merged = prices_df.merge(shop_lookup, on="shop_id", how="left")
 
     # กันเหนียวอีกชั้น: ถ้ายังไม่มีคอลัมน์ shop_name ด้วยเหตุผลใดก็ตาม ให้สร้างเป็นค่าว่าง
-    if "shop_name" not in merged.columns:
-        merged["shop_name"] = "-"
-    merged["shop_name"] = merged["shop_name"].fillna("-")
-
-    date_col = merged["price_date"].astype(str) if "price_date" in merged.columns else ""
-    product_col = merged["product_name"].fillna("-") if "product_name" in merged.columns else "-"
-
-    merged["label"] = date_col + " | " + merged["shop_name"] + " | " + product_col
-
     selected_label = st.selectbox("เลือกรายการ", merged["label"], key=_k("price_select"))
     filtered = merged.loc[merged["label"] == selected_label]
 
-if not filtered.empty:
-    row = filtered.iloc[0]
-    # เอาโค้ดเดิมของคุณมาใส่ต่อตรงนี้
-else:
-    # โค้ดสำรองเวลากรองไม่เจอข้อมูล เช่น แจ้งเตือนหรือกำหนดค่าว่าง
-    row = None
-    st.warning("ไม่พบข้อมูลรายการที่เลือก")
-    price_id = int(row["id"])
-
-    shop_names = shops_df["shop_name"].tolist()
-    current_shop_name = row.get("shop_name") or (shop_names[0] if shop_names else "")
+    if not filtered.empty:
+        row = filtered.iloc[0]
+        
+        # โค้ดเดิมของคุณที่ดึงค่าจาก row
+        price_id = int(row["id"])
+        shop_names = shops_df["shop_name"].tolist()
+        current_shop_name = row.get("shop_name") or (shop_names[0] if shop_names else "")
+        
+    else:
+        st.warning("ไม่พบข้อมูลรายการที่เลือก")
+        st.stop()
 
     shop_name = st.selectbox(
         "ร้านค้า", shop_names,
