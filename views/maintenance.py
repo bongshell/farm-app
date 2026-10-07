@@ -232,16 +232,22 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
         key=_k("edit_price_unit"),
     )
 
-    c3, c4 = st.columns(2)
+       c3, c4 = st.columns(2)
     product_name = c3.text_input("ชื่อสินค้า / ยี่ห้อ", value=str(row.get("product_name") or ""), key=_k("edit_price_name"))
     variety = c4.text_input("สายพันธุ์", value=str(row.get("variety") or ""), key=_k("edit_price_variety"))
 
     c5, c6 = st.columns(2)
     price = c5.number_input("ราคา (บาท)", min_value=0.0, step=1.0, value=float(row.get("price") or 0), key=_k("edit_price_val"))
-    try:
-        default_date = pd.to_datetime(row.get("price_date")).date()
-    except Exception:
+    
+    # แทนที่ช่วง try-except เดิมด้วยชุดนี้ครับ
+    raw_date = row.get("price_date")
+    if pd.isna(raw_date) or raw_date is None or str(raw_date).strip() == "":
         default_date = date.today()
+    else:
+        try:
+            default_date = pd.to_datetime(raw_date).date()
+        except Exception:
+            default_date = date.today()
     price_date = c6.date_input("วันที่สืบราคา", value=default_date, max_value=date.today(), key=_k("edit_price_date"))
 
     note = st.text_input("หมายเหตุ", value=str(row.get("note") or ""), key=_k("edit_price_note"))
