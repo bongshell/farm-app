@@ -196,7 +196,15 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
     merged["label"] = date_col + " | " + merged["shop_name"] + " | " + product_col
 
     selected_label = st.selectbox("เลือกรายการ", merged["label"], key=_k("price_select"))
-    row = merged.loc[merged["label"] == selected_label].iloc[0]
+    filtered = merged.loc[merged["label"] == selected_label]
+
+if not filtered.empty:
+    row = filtered.iloc[0]
+    # เอาโค้ดเดิมของคุณมาใส่ต่อตรงนี้
+else:
+    # โค้ดสำรองเวลากรองไม่เจอข้อมูล เช่น แจ้งเตือนหรือกำหนดค่าว่าง
+    row = None
+    st.warning("ไม่พบข้อมูลรายการที่เลือก")
     price_id = int(row["id"])
 
     shop_names = shops_df["shop_name"].tolist()
