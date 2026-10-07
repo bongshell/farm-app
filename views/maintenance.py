@@ -182,37 +182,25 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
     shop_lookup = shops_df[["id", "shop_name"]].copy()
     shop_lookup["id"] = pd.to_numeric(shop_lookup["id"], errors="coerce")
     shop_lookup = shop_lookup.rename(columns={"id": "shop_id"})
-    
+
     merged = prices_df.merge(shop_lookup, on="shop_id", how="left")
 
-    # ป้องกันกรณีไม่มีคอลัมน์ label ให้สร้างขึ้นมาสำรอง
-    if "label" not in merged.columns:
-        if "name" in merged.columns:
-            merged["label"] = merged["name"].astype(str)
-        else:
-            merged["label"] = "รายการที่ " + merged["id"].astype(str)
+    # กันเหนียวอีกชั้น: ถ้ายังไม่มีคอลัมน์ shop_name ด้วยเหตุผลใดก็ตาม ให้สร้างเป็นค่าว่าง
+    if "shop_name" not in merged.columns:
+        merged["shop_name"] = "-"
+    merged["shop_name"] = merged["shop_name"].fillna("-")
 
-    # เช็คว่าตารางว่างไหมก่อนให้ selectbox ทำงาน
-    if merged.empty:
-        st.warning("ยังไม่มีข้อมูลรายการราคาในระบบ")
-        st.stop()
+    date_col = merged["price_date"].astype(str) if "price_date" in merged.columns else ""
+    product_col = merged["product_name"].fillna("-") if "product_name" in merged.columns else "-"
+
+    merged["label"] = date_col + " | " + merged["shop_name"] + " | " + product_col
 
     selected_label = st.selectbox("เลือกรายการ", merged["label"], key=_k("price_select"))
-    filtered = merged.loc[merged["label"] == selected_label]
+    row = merged.loc[merged["label"] == selected_label].iloc[0]
+    price_id = int(row["id"])
 
-    if not filtered.empty:
-        row = filtered.iloc[0]
-        
-        # ดึงค่าจาก row
-        price_id = int(row["id"])
-        shop_names = shops_df["shop_name"].tolist()
-        current_shop_name = row.get("shop_name") or (shop_names[0] if shop_names else "")
-        
-    else:
-        st.warning("ไม่พบข้อมูลรายการที่เลือก")
-        st.stop()
-        st.warning("ไม่พบข้อมูลรายการที่เลือก")
-        st.stop()
+    shop_names = shops_df["shop_name"].tolist()
+    current_shop_name = row.get("shop_name") or (shop_names[0] if shop_names else "")
 
     shop_name = st.selectbox(
         "ร้านค้า", shop_names,
@@ -232,22 +220,16 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
         key=_k("edit_price_unit"),
     )
 
-       c3, c4 = st.columns(2)
+    c3, c4 = st.columns(2)
     product_name = c3.text_input("ชื่อสินค้า / ยี่ห้อ", value=str(row.get("product_name") or ""), key=_k("edit_price_name"))
     variety = c4.text_input("สายพันธุ์", value=str(row.get("variety") or ""), key=_k("edit_price_variety"))
 
     c5, c6 = st.columns(2)
     price = c5.number_input("ราคา (บาท)", min_value=0.0, step=1.0, value=float(row.get("price") or 0), key=_k("edit_price_val"))
-    
-    # แทนที่ช่วง try-except เดิมด้วยชุดนี้ครับ
-    raw_date = row.get("price_date")
-    if pd.isna(raw_date) or raw_date is None or str(raw_date).strip() == "":
+    try:
+        default_date = pd.to_datetime(row.get("price_date")).date()
+    except Exception:
         default_date = date.today()
-    else:
-        try:
-            default_date = pd.to_datetime(raw_date).date()
-        except Exception:
-            default_date = date.today()
     price_date = c6.date_input("วันที่สืบราคา", value=default_date, max_value=date.today(), key=_k("edit_price_date"))
 
     note = st.text_input("หมายเหตุ", value=str(row.get("note") or ""), key=_k("edit_price_note"))
