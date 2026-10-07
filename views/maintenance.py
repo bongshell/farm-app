@@ -182,22 +182,35 @@ def _price_edit(shops_df: pd.DataFrame, prices_df: pd.DataFrame) -> None:
     shop_lookup = shops_df[["id", "shop_name"]].copy()
     shop_lookup["id"] = pd.to_numeric(shop_lookup["id"], errors="coerce")
     shop_lookup = shop_lookup.rename(columns={"id": "shop_id"})
-
+    
     merged = prices_df.merge(shop_lookup, on="shop_id", how="left")
 
-    # กันเหนียวอีกชั้น: ถ้ายังไม่มีคอลัมน์ shop_name ด้วยเหตุผลใดก็ตาม ให้สร้างเป็นค่าว่าง
+    # ป้องกันกรณีไม่มีคอลัมน์ label ให้สร้างขึ้นมาสำรอง
+    if "label" not in merged.columns:
+        if "name" in merged.columns:
+            merged["label"] = merged["name"].astype(str)
+        else:
+            merged["label"] = "รายการที่ " + merged["id"].astype(str)
+
+    # เช็คว่าตารางว่างไหมก่อนให้ selectbox ทำงาน
+    if merged.empty:
+        st.warning("ยังไม่มีข้อมูลรายการราคาในระบบ")
+        st.stop()
+
     selected_label = st.selectbox("เลือกรายการ", merged["label"], key=_k("price_select"))
     filtered = merged.loc[merged["label"] == selected_label]
 
     if not filtered.empty:
         row = filtered.iloc[0]
         
-        # โค้ดเดิมของคุณที่ดึงค่าจาก row
+        # ดึงค่าจาก row
         price_id = int(row["id"])
         shop_names = shops_df["shop_name"].tolist()
         current_shop_name = row.get("shop_name") or (shop_names[0] if shop_names else "")
         
     else:
+        st.warning("ไม่พบข้อมูลรายการที่เลือก")
+        st.stop()
         st.warning("ไม่พบข้อมูลรายการที่เลือก")
         st.stop()
 
